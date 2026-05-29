@@ -6,12 +6,16 @@ DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))
 
 def get_embedding_model():
     """
-    Uses FastEmbed: 100% local, lightning-fast, and bypasses PyTorch
-    entirely to prevent Windows Memory allocation crashes.
+    Uses FastEmbed with the absolute lightest model available,
+    locked to a single thread to prevent any memory spikes.
     """
-    # BAAI/bge-small-en-v1.5 is a highly quantized, tiny model 
-    # that punches way above its weight class in semantic search.
-    return FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+    from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+    
+    return FastEmbedEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2", # The ultra-light model
+        batch_size=8,  # Tiny batch size
+        threads=1      # Strictly single-threaded execution
+    )
 
 def create_vector_db(chunks: list[str], collection_name: str = "research_paper"):
     """

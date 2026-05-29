@@ -6,18 +6,19 @@ from langchain_core.prompts import ChatPromptTemplate
 # 1. Define the strict data schema
 # This tells LLM exactly what fields we want ad what data type they must be
 class PaperInsights(BaseModel):
-    architecture: str = Field(
-        description= "The main ML architecture, neural network, or algorithm proposed in the paper."
-        
+    architecture: str = Field(description="The main ML architecture or algorithm.")
+    datasets: list[str] = Field(description="Datasets used for training or evaluation.")
+    key_metrics: dict[str, str] = Field(description="Key performance metrics. Example: {'Accuracy': '95.4%'}")
+    core_contribution: str = Field(description="A 1-sentence summary of the primary contribution.")
+    
+    # --- NEW FIELD FOR MATH ---
+    key_calculations: list[str] = Field(
+        description="A list of the 2 to 3 most important mathematical formulas, loss functions, or calculations mentioned in the text."
     )
-    datasets: list[str] = Field(
-        description= "A list of the specific datasets used for training and evaluation."
-    )
-    key_metrics: dict[str, str] =Field(
-        description="Key performance metrics reported. Format as {'Metric Name': 'Value}, Example: {'Accuracy':'95.4%'}"
-    )
-    core_contribution: str=Field(
-        description="A strict, 1-sentence summary of the paper's primary scientific contribution."
+    
+    # --- NEW FIELD FOR SUMMARY ---
+    final_summary: str = Field(
+        description="Write a comprehensive 1-2 paragraph summary synthesizing the problem, method, and results. Do NOT output 'Not Specified' for this field."
     )
     
 def extract_insights(retrieved_context: list)->PaperInsights:
@@ -38,9 +39,11 @@ def extract_insights(retrieved_context: list)->PaperInsights:
     
     system_prompt = """
     You are an expert AI data extraction tool.
-    Extract the requested inormation from the provided academic text.
-    If a specific detail (like an dataset or metric) is not mentioned in the text, output "Not Specified" or leave the list/dictionary empty.
-    Do NOT invent information.
+    
+    RULES:
+    1. For factual fields (architecture, datasets, metrics, calculations), extract the exact information. If not found, output "Not Specified" or leave empty.
+    2. For the 'final_summary' field, you MUST write and generate a new summary based on the provided context. Do NOT output 'Not Specified' for the summary.
+    3. Do NOT hallucinate data outside the context.
     
     CONTEXT:
     {context}

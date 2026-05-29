@@ -1,4 +1,4 @@
-from backend.services.parser import extract_text_from_pdf
+from backend.services.parser import extract_text_and_images
 from backend.services.chunker import chunk_paper_text
 from backend.services.vector_store import create_vector_db, search_vector_db
 from backend.services.generator import reconstruct_section
@@ -8,31 +8,33 @@ from backend.services.exporter import create_reconstructed_document
 def run_test():
     pdf_path = "data/sample_paper.pdf"
     
-    print("1. Extracting text from source layout...")
-    raw_text = extract_text_from_pdf(pdf_path)
+    print("1. Extracting text AND images...")
+    # Now unpacking two variables: the text and the list of image paths
+    raw_text, image_paths = extract_text_and_images(pdf_path)
+    print(f"   -> Extracted {len(image_paths)} graphs/images.")
     
-    print("2. Slicing document into token-aware context chunks...")
-    chunks = chunk_paper_text(raw_text, chunk_size=800, chunk_overlap=150)
+    print("2. Chunking text...")
+    chunks = chunk_paper_text(raw_text, chunk_size=400, chunk_overlap=50)
     
-    print("3. Committing chunks to offline vector storage...")
+    print("3. Connecting to Vector Database...")
     create_vector_db(chunks)
     
     print("\n--- PHASE 4: TEXT RECONSTRUCTION ---")
     abstract_results = search_vector_db("Abstract introduction background problem solution", k=3)
     reconstructed_abstract = reconstruct_section("The Abstract of the paper", abstract_results)
-    print("Abstract successfully synthesized.")
     
-    print("\n--- PHASE 5: STRUCTURED INSIGHT EXTRACTION ---")
-    extraction_query = "datasets used evaluation metrics results architecture model design proposed method"
-    insight_results = search_vector_db(extraction_query, k=5)
+    print("\n--- PHASE 5: ADVANCED INSIGHT & MATH EXTRACTION ---")
+    # We expand our query to include mathematical terms and conclusion keywords
+    extraction_query = "datasets evaluation metrics architecture proposed method equation formula calculation loss function conclusion summary"
+    insight_results = search_vector_db(extraction_query, k=6)
     insights = extract_insights(insight_results)
-    print("Structured JSON metadata gathered.")
     
-    print("\n--- PHASE 6: COMPILING WORD DOCUMENT ---")
-    output_path = create_reconstructed_document(reconstructed_abstract, insights, "PEFT_Arena_Reconstructed.docx")
+    print("\n--- PHASE 6: COMPILING ADVANCED WORD DOCUMENT ---")
+    # Pass the images into the document generator
+    output_path = create_reconstructed_document(reconstructed_abstract, insights, image_paths, "Advanced_Paper_Report.docx")
     
     print("\n==============================================")
-    print("SUCCESS: Full AI Reconstruction Pipeline Complete!")
+    print("SUCCESS: Advanced AI Report Compiled!")
     print(f"Saved Document to: {output_path}")
     print("==============================================")
 
