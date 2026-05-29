@@ -4,18 +4,31 @@ import os
 
 DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "chroma_db")
 
+# --- ADD THIS GLOBAL VARIABLE AT THE TOP OF THE FILE ---
+_global_embedding_model = None
+
 def get_embedding_model():
     """
     Uses FastEmbed with the absolute lightest model available,
-    locked to a single thread to prevent any memory spikes.
+    locked to a single thread. Uses a Singleton pattern to prevent 
+    Streamlit from reloading the model into RAM on every chat message.
     """
+    global _global_embedding_model
+    
+    # If the model is already loaded in RAM, just return it!
+    if _global_embedding_model is not None:
+        return _global_embedding_model
+        
     from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
     
-    return FastEmbedEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2", # The ultra-light model
-        batch_size=8,  # Tiny batch size
-        threads=1      # Strictly single-threaded execution
+    # Otherwise, load it for the very first time
+    _global_embedding_model = FastEmbedEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2", 
+        batch_size=8,  
+        threads=1      
     )
+    
+    return _global_embedding_model
 
 def create_vector_db(chunks: list[str], collection_name: str = "research_paper"):
     """

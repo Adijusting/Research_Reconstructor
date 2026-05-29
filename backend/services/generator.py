@@ -57,4 +57,29 @@ def reconstruct_section(query: str, retrieved_context: list) -> str:
     })
     
     return response.content
+
+def answer_research_question(query: str, retrieved_context: list) -> str:
+    """
+    Acts as an interactive Q&A agent. Answers the user's question 
+    using ONLY the context retrieved from the multiple uploaded PDFs.
+    """
+    llm = get_llm()
+    context_text = "\n\n---\n\n".join([doc.page_content for doc in retrieved_context])
     
+    system_prompt = """
+    You are an elite AI research assistant helping a scientist explore their uploaded literature.
+    Answer the user's question based STRICTLY on the provided context below.
+    If the context does not contain the answer, politely state that the information is not present in the uploaded documents.
+    Do NOT hallucinate or use outside knowledge.
+    
+    CONTEXT:
+    {context}
+    """
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{query}")
+    ])
+    
+    chain = prompt | llm
+    return chain.invoke({"context": context_text, "query": query}).content

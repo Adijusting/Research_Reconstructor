@@ -1,87 +1,158 @@
 import streamlit as st
 import os
-import tempfile
 import sys
+import tempfile
+
+# Force Python to find the backend
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from backend.services.parser import extract_text_and_images
 from backend.services.chunker import chunk_paper_text
 from backend.services.vector_store import create_vector_db, search_vector_db
-from backend.services.generator import reconstruct_section
+from backend.services.generator import reconstruct_section, answer_research_question
 from backend.services.extractor import extract_insights
 from backend.services.exporter import create_reconstructed_document
 
-# --- UI Configuration ---
-st.set_page_config(page_title="AI Research Reconstructor", layout="wide")
-st.title("📄 AI Research Paper Reconstructor")
-st.markdown("Upload a complex academic PDF, and the AI will extract the core methodology, metrics, and math, synthesizing a clean Word document.")
+# --- 1. SLEEK UI CONFIGURATION ---
+st.set_page_config(page_title="AI Research Engine", page_icon="🧬", layout="wide")
 
-# --- Sidebar ---
+# Custom CSS for a highly aesthetic, modern look
+st.markdown("""
+    <style>
+    .main {background-color: #0E1117;}
+    h1, h2, h3 {color: #00FFB2 !important; font-weight: 600;}
+    .stButton>button {
+        background-color: #00FFB2; 
+        color: #0E1117; 
+        border-radius: 8px; 
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #00CC8E; 
+        border-color: #00FFB2;
+    }
+    .css-1d391kg {background-color: #161A22;} /* Sidebar styling */
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("🧬 Multi-Source AI Research Engine")
+st.markdown("*Upload multiple academic papers. Extract insights, compile reports, and chat with your literature.*")
+
+# --- 2. SESSION STATE INIT ---
+# We use this to remember if the DB has been built and to store chat history
+if "db_ready" not in st.session_state:
+    st.session_state.db_ready = False
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# --- 3. SIDEBAR & MULTI-FILE UPLOAD ---
 with st.sidebar:
-    st.header("1. Upload Paper")
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    st.header("📂 Document Vault")
+    # THE MAGIC SWITCH: accept_multiple_files=True
+    uploaded_files = st.file_uploader("Upload Research PDFs", type="pdf", accept_multiple_files=True)
     
-    st.markdown("---")
-    st.write("**Pipeline Status:**")
-    status_text = st.empty()
-    status_text.info("Awaiting file upload...")
+    if st.button("Process & Build Memory", use_container_width=True):
+        if not uploaded_files:
+            st.error("Please upload at least one PDF.")
+        else:
+            with st.status("Building AI Memory Bank...", expanded=True) as status:
+                all_raw_text = ""
+                all_image_paths = []
+                
+                # Loop through ALL uploaded files and stitch them together
+                for idx, file in enumerate(uploaded_files):
+                    st.write(f"Parsing Document {idx+1}/{len(uploaded_files)}: {file.name}...")
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                        tmp_file.write(file.getvalue())
+                        temp_pdf_path = tmp_file.name
+                        
+                    raw_text, img_paths = extract_text_and_images(temp_pdf_path)
+                    all_raw_text += f"\n\n--- DOCUMENT: {file.name} ---\n\n" + raw_text
+                    all_image_paths.extend(img_paths)
+                
+                st.write("Slicing combined text into semantic chunks...")
+                chunks = chunk_paper_text(all_raw_text, chunk_size=400, chunk_overlap=50)
+                
+                st.write("Embedding vectors into FastEmbed/ChromaDB...")
+                create_vector_db(chunks)
+                
+                # Save paths to session state for the exporter to use later
+                st.session_state.all_image_paths = all_image_paths
+                st.session_state.db_ready = True
+                status.update(label="Memory Bank Built Successfully!", state="complete", expanded=False)
 
-# --- Main Logic ---
-if uploaded_file is not None:
-    # 1. Save the uploaded file temporarily so our backend can read it
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.getvalue())
-        temp_pdf_path = tmp_file.name
-
-    st.success("File uploaded successfully! Click below to start the AI engine.")
+# --- 4. MAIN DASHBOARD TABS ---
+# Only show the tools if the DB is ready
+if st.session_state.db_ready:
+    tab1, tab2 = st.tabs(["📑 Auto-Report Generation", "💬 Chat with Literature"])
     
-    if st.button("Run AI Reconstruction Pipeline", type="primary"):
+    # --- TAB 1: REPORT GENERATION ---
+    with tab1:
+        st.subheader("Generate Multi-Document Synthesis Report")
+        if st.button("Synthesize Executive Report"):
+            with st.spinner("Extracting overarching insights across all documents..."):
+                abstract_results = search_vector_db("Abstract introduction background problem solution overarching theme", k=4)
+                reconstructed_abstract = reconstruct_section("A combined executive abstract summarizing all provided documents", abstract_results)
+                
+                insight_results = search_vector_db("datasets evaluation metrics architecture proposed method equation calculation conclusion summary", k=8)
+                insights = extract_insights(insight_results)
+                
+                output_docx_path = create_reconstructed_document(
+                    reconstructed_abstract, 
+                    insights, 
+                    st.session_state.all_image_paths, 
+                    "Multi_Paper_Report.docx"
+                )
+                
+            st.success("Report Compiled!")
+            
+            # Display Quick Insights
+            st.markdown("### 📊 Consolidated Metrics")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"**Core Contribution:**\n{insights.core_contribution}")
+                st.info(f"**Combined Architectures:**\n{insights.architecture}")
+            with col2:
+                st.success(f"**All Datasets:**\n{', '.join(insights.datasets)}")
+                st.json(insights.key_metrics)
+                
+            with open(output_docx_path, "rb") as file:
+                st.download_button(
+                    label="📥 Download Consolidated Word Document",
+                    data=file,
+                    file_name="Multi_Paper_AI_Report.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+    # --- TAB 2: INTERACTIVE Q&A CHAT ---
+    with tab2:
+        st.subheader("Explore Your Documents")
         
-        # We use st.spinner to give the user visual feedback during heavy processing
-        with st.spinner("Extracting multi-modal layout (Text & Images)..."):
-            raw_text, image_paths = extract_text_and_images(temp_pdf_path)
-            
-        with st.spinner("Chunking and mapping semantic memory..."):
-            chunks = chunk_paper_text(raw_text, chunk_size=400, chunk_overlap=50)
-            create_vector_db(chunks)
-            
-        with st.spinner("Synthesizing Reconstructed Abstract..."):
-            abstract_results = search_vector_db("Abstract introduction background problem solution", k=3)
-            reconstructed_abstract = reconstruct_section("The Abstract of the paper", abstract_results)
-            
-        with st.spinner("Extracting structured metadata and math..."):
-            extraction_query = "datasets evaluation metrics architecture proposed method equation formula calculation loss function conclusion summary"
-            insight_results = search_vector_db(extraction_query, k=6)
-            insights = extract_insights(insight_results)
-            
-        with st.spinner("Compiling final Word Document..."):
-            output_docx_path = create_reconstructed_document(reconstructed_abstract, insights, image_paths, "Streamlit_Export.docx")
-            
-        st.balloons()
-        status_text.success("Processing Complete!")
-        
-        # --- Display Results ---
-        st.header("📊 Extracted Insights")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("Core Contribution")
-            st.write(insights.core_contribution)
-            st.subheader("Architecture")
-            st.write(insights.architecture)
-            
-        with col2:
-            st.subheader("Key Metrics")
-            st.json(insights.key_metrics)
-            st.subheader("Datasets")
-            st.write(", ".join(insights.datasets))
-            
-        st.markdown("---")
-        
-        # --- Download Button ---
-        with open(output_docx_path, "rb") as file:
-            btn = st.download_button(
-                label="📥 Download Reconstructed Word Document",
-                data=file,
-                file_name="AI_Reconstructed_Report.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+        # Render existing chat history
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+                
+        # Accept user input
+        if prompt := st.chat_input("Ask a question about the uploaded papers..."):
+            # Add user message to UI
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+                
+            # Generate AI response
+            with st.chat_message("assistant"):
+                with st.spinner("Searching literature..."):
+                    # Retrieve context specific to the user's question
+                    relevant_chunks = search_vector_db(prompt, k=5)
+                    # Pass it to Groq
+                    response = answer_research_question(prompt, relevant_chunks)
+                    st.markdown(response)
+                    
+            # Save AI response to history
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+else:
+    # Empty State Instructions
+    st.info("👈 Please upload one or more PDFs in the sidebar and click 'Process & Build Memory' to activate the AI Engine.")
