@@ -1,0 +1,28 @@
+# --- Frontend / UI ---
+streamlit>=1.37.0
+
+# --- Local LLM (Ollama) + Graph Extraction ---
+langchain-ollama>=0.1.3
+langchain-neo4j>=0.1.0
+langchain-experimental>=0.0.64
+langchain-core>=0.2.38
+
+# --- Cloud Vision & Synthesis (OpenAI) ---
+openai>=1.40.0
+httpx>=0.27.0
+
+# --- Graph Database Driver ---
+neo4j>=5.23.0
+
+# --- PDF Parsing / Chart Extraction ---
+PyMuPDF>=1.24.9
+pdfplumber>=0.11.4
+
+# --- Image Handling / Compression ---
+pillow>=10.4.0
+
+# --- Word Document Compilation ---
+python-docx>=1.1.2
+
+# --- Env / Config ---
+python-dotenv>=1.0.1
